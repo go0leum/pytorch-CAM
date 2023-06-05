@@ -15,8 +15,8 @@ from inception import inception_v3
 # functions
 CAM             = 1
 USE_CUDA        = 1
-RESUME          = 0
-PRETRAINED      = 0
+RESUME          = 10
+PRETRAINED      = 1
 
 
 # hyperparameters
@@ -46,15 +46,15 @@ transform_test = transforms.Compose([
     normalize
 ])
 
-train_data = datasets.ImageFolder('kaggle/train/', transform=transform_train)
+train_data = datasets.ImageFolder('fire_detection/train/', transform=transform_train)
 trainloader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
 
-test_data = datasets.ImageFolder('kaggle/test/', transform=transform_test)
+test_data = datasets.ImageFolder('fire_detection/test/', transform=transform_test)
 testloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
 
 
 # class
-classes = {0: 'cat', 1: 'dog'}
+classes = {0: 'fire', 1: 'nonfire'}
 
 
 # fine tuning
@@ -62,7 +62,7 @@ if PRETRAINED:
     net = inception_v3(pretrained=PRETRAINED)
     for param in net.parameters():
         param.requires_grad = False
-    net.fc = torch.nn.Linear(2048, 2)
+    net.fc = torch.nn.Linear(2048, len(classes))
 else:
     net = inception_v3(pretrained=PRETRAINED, num_classes=len(classes))
 final_conv = 'Mixed_7c'
@@ -81,9 +81,11 @@ if RESUME != 0:
 criterion = torch.nn.CrossEntropyLoss()
 
 if PRETRAINED:
-    optimizer = torch.optim.SGD(net.fc.parameters(), lr=LEARNING_RATE, momentum=0.9, weight_decay=5e-4)
+    #optimizer = torch.optim.SGD(net.fc.parameters(), lr=LEARNING_RATE, momentum=0.9, weight_decay=5e-4)
+    optimizer = torch.optim.Adam(net.fc.parameters())
 else:
-    optimizer = torch.optim.SGD(net.parameters(), lr=LEARNING_RATE, momentum=0.9, weight_decay=5e-4)
+    #optimizer = torch.optim.SGD(net.parameters(), lr=LEARNING_RATE, momentum=0.9, weight_decay=5e-4)
+    optimizer = torch.optim.Adam(net.parameters())
 
 for epoch in range (1, EPOCH + 1):
     retrain(trainloader, net, USE_CUDA, epoch, criterion, optimizer)
@@ -101,6 +103,13 @@ net._modules.get(final_conv).register_forward_hook(hook_feature)
 
 # CAM
 if CAM:
-    root = 'sample.jpg'
-    img = Image.open(root)
-    get_cam(net, features_blobs, img, classes, root)
+    #root = 'sample.jpg'
+    #img = Image.open(root)
+    #get_cam(net, features_blobs, img, classes, root)
+    for _, _, f in os.walk('data'):
+        for file in f:
+            if '.png' not in file:
+                continue
+            root = os.path.join('data', file)
+            img = Image.open(root)
+            get_cam(net, features_blobs, img, classes, root)

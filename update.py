@@ -3,9 +3,10 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 import numpy as np
 import cv2, torch
+import os
 
 # generate class activation mapping for the top1 prediction
-def returnCAM(feature_conv, weight_softmax, class_idx):
+def return_cam(feature_conv, weight_softmax, class_idx):
     # generate the class activation maps upsample to 256x256
     size_upsample = (256, 256)
     bz, nc, h, w = feature_conv.shape
@@ -20,6 +21,7 @@ def returnCAM(feature_conv, weight_softmax, class_idx):
     return output_cam
 
 def get_cam(net, features_blobs, img_pil, classes, root_img):
+    net.eval()
     params = list(net.parameters())
     weight_softmax = np.squeeze(params[-2].data.cpu().numpy())
 
@@ -45,7 +47,7 @@ def get_cam(net, features_blobs, img_pil, classes, root_img):
         line = '{:.3f} -> {}'.format(probs[i], classes[idx[i].item()])
         print(line)
 
-    CAMs = returnCAM(features_blobs[0], weight_softmax, [idx[0].item()])
+    CAMs = return_cam(features_blobs[0], weight_softmax, [0])
 
     # render the CAM and output
     print('output CAM.jpg for the top1 prediction: %s' % classes[idx[0].item()])
@@ -54,4 +56,5 @@ def get_cam(net, features_blobs, img_pil, classes, root_img):
     CAM = cv2.resize(CAMs[0], (width, height))
     heatmap = cv2.applyColorMap(CAM, cv2.COLORMAP_JET)
     result = heatmap * 0.3 + img * 0.5
-    cv2.imwrite('cam.jpg', result)
+    cv2.imwrite('res_' + root_img, result)
+    #cv2.imwrite('cam.jpg', result)

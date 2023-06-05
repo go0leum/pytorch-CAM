@@ -36,11 +36,11 @@ def retrain(trainloader, model, use_cuda, epoch, criterion, optimizer):
     print('Train Epoch: {}\tAverage Loss: {:.3f}\tAverage Accuracy: {:.3f}%'.format(epoch, loss_avg, acc_avg))
 
     with open('result/train_acc.txt', 'a') as f:
-        f.write(str(acc_avg))
-    f.close()
+        f.write(str(acc_avg) + '\n')
+
     with open('result/train_loss.txt', 'a') as f:
-        f.write(str(loss_avg))
-    f.close()
+        f.write(str(loss_avg) + '\n')
+
 
 def retest(testloader, model, use_cuda, criterion, epoch, RESUME):
     model.eval()
@@ -64,15 +64,13 @@ def retest(testloader, model, use_cuda, criterion, epoch, RESUME):
     print(result)
 
     # Save checkpoint.
-    if epoch % 10 == 0:
-        torch.save(model.state_dict(), 'checkpoint/' + str(RESUME + int(epoch / 10)) + '.pt')
-        with open('result/result.txt', 'a') as f:
-            f.write(result)
-        f.close()
+    torch.save(model.state_dict(), 'checkpoint/' + str(RESUME + epoch) + '.pt')
+    with open('result/result.txt', 'a') as f:
+        f.write(result)
 
     with open('result/test_acc.txt', 'a') as f:
-        f.write(str(test_acc))
-    f.close()
+        f.write(str(test_acc) + '\n')
+
     with open('result/test_loss.txt', 'a') as f:
-        f.write(str(test_loss))
-    f.close()
+        f.write(str(test_loss) + '\n')
+
