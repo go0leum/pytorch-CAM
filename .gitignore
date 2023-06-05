@@ -3,3 +3,9 @@ __pycache__
 kaggle/*
 result*/
 result*
+checkpoint
+data
+fire_detection
+res_data
+venv
+
