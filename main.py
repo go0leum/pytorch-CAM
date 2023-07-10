@@ -21,9 +21,9 @@ PRETRAINED      = 1
 
 # hyperparameters
 BATCH_SIZE      = 32
-IMG_SIZE        = 224
-LEARNING_RATE   = 0.01
-EPOCH           = 0
+IMG_SIZE        = 256
+LEARNING_RATE   = 0.0001
+EPOCH           = 5
 
 
 # prepare data
@@ -33,24 +33,26 @@ normalize = transforms.Normalize(
 )
 
 transform_train = transforms.Compose([
-    transforms.RandomResizedCrop(224),
+    #transforms.RandomResizedCrop(IMG_SIZE),
+    transforms.Resize((IMG_SIZE,IMG_SIZE)),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
     normalize
 ])
 
 transform_test = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(224),
+    #transforms.Resize(256),
+    transforms.Resize((IMG_SIZE,IMG_SIZE)),
+    transforms.CenterCrop(IMG_SIZE),
     transforms.ToTensor(),
     normalize
 ])
 
 train_data = datasets.ImageFolder('fire_detection/train/', transform=transform_train)
-trainloader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
+trainloader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
 
 test_data = datasets.ImageFolder('fire_detection/test/', transform=transform_test)
-testloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
+testloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
 
 
 # class
@@ -82,10 +84,10 @@ criterion = torch.nn.CrossEntropyLoss()
 
 if PRETRAINED:
     #optimizer = torch.optim.SGD(net.fc.parameters(), lr=LEARNING_RATE, momentum=0.9, weight_decay=5e-4)
-    optimizer = torch.optim.Adam(net.fc.parameters())
+    optimizer = torch.optim.Adam(net.fc.parameters(), lr=LEARNING_RATE)
 else:
     #optimizer = torch.optim.SGD(net.parameters(), lr=LEARNING_RATE, momentum=0.9, weight_decay=5e-4)
-    optimizer = torch.optim.Adam(net.parameters())
+    optimizer = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE)
 
 for epoch in range (1, EPOCH + 1):
     retrain(trainloader, net, USE_CUDA, epoch, criterion, optimizer)
@@ -106,10 +108,23 @@ if CAM:
     #root = 'sample.jpg'
     #img = Image.open(root)
     #get_cam(net, features_blobs, img, classes, root)
+    fire_sum=0
+    nonfire_sum=0
+    nonfire=-1;
     for _, _, f in os.walk('data'):
         for file in f:
             if '.png' not in file:
                 continue
             root = os.path.join('data', file)
             img = Image.open(root)
-            get_cam(net, features_blobs, img, classes, root)
+            features_blobs = []
+            net._modules.get(final_conv).register_forward_hook(hook_feature)
+            nonfire = get_cam(net, features_blobs, img, classes, root, IMG_SIZE)
+
+            #count fire, nonfire
+            if nonfire==0:
+                fire_sum+=1
+            elif nonfire==1:
+                nonfire_sum+=1
+    
+    print('output CAM.jpg total fire : {0}, nonfire : {1}'.format(fire_sum, nonfire_sum))

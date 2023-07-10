@@ -20,8 +20,10 @@ def return_cam(feature_conv, weight_softmax, class_idx):
         output_cam.append(cv2.resize(cam_img, size_upsample))
     return output_cam
 
-def get_cam(net, features_blobs, img_pil, classes, root_img):
+
+def get_cam(net, features_blobs, img_pil, classes, root_img, img_size):
     net.eval()
+    
     params = list(net.parameters())
     weight_softmax = np.squeeze(params[-2].data.cpu().numpy())
 
@@ -30,7 +32,7 @@ def get_cam(net, features_blobs, img_pil, classes, root_img):
         std=[0.229, 0.224, 0.225]
     )
     preprocess = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((img_size, img_size)),
         transforms.ToTensor(),
         normalize
     ])
@@ -50,7 +52,7 @@ def get_cam(net, features_blobs, img_pil, classes, root_img):
     CAMs = return_cam(features_blobs[0], weight_softmax, [0])
 
     # render the CAM and output
-    print('output CAM.jpg for the top1 prediction: %s' % classes[idx[0].item()])
+    print('output %s for the top1 prediction: %s' %(root_img, classes[idx[0].item()]))
     img = cv2.imread(root_img)
     height, width, _ = img.shape
     CAM = cv2.resize(CAMs[0], (width, height))
@@ -58,3 +60,5 @@ def get_cam(net, features_blobs, img_pil, classes, root_img):
     result = heatmap * 0.3 + img * 0.5
     cv2.imwrite('res_' + root_img, result)
     #cv2.imwrite('cam.jpg', result)
+    
+    return idx[0].item()
