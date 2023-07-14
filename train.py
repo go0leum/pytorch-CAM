@@ -11,8 +11,9 @@ def retrain(trainloader, model, use_cuda, epoch, criterion, optimizer):
             data, target = data.cuda(), target.cuda()
         data, target = Variable(data), Variable(target)
         optimizer.zero_grad()
+        
         output = model(data)
-
+        
         # calculate accuracy
         correct += (torch.max(output, 1)[1].view(target.size()).data == target.data).sum()
         total += trainloader.batch_size

@@ -10,21 +10,24 @@ import torch, os
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from inception import inception_v3
-
+import time
 
 # functions
 CAM             = 1
 USE_CUDA        = 1
-RESUME          = 10
+RESUME          = 50
 PRETRAINED      = 1
-
+SLIDING_WINDOW  = 0
 
 # hyperparameters
 BATCH_SIZE      = 32
 IMG_SIZE        = 256
 LEARNING_RATE   = 0.0001
-EPOCH           = 5
+EPOCH           = 0
 
+#sliding window
+WINDOW_SIZE    = 256
+STEP_SIZE      = 128
 
 # prepare data
 normalize = transforms.Normalize(
@@ -51,7 +54,8 @@ transform_test = transforms.Compose([
 train_data = datasets.ImageFolder('fire_detection/train/', transform=transform_train)
 trainloader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
 
-test_data = datasets.ImageFolder('fire_detection/test/', transform=transform_test)
+#test_data = datasets.ImageFolder('fire_detection/test/', transform=transform_test)
+test_data = datasets.ImageFolder('fire_detection/test/')
 testloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
 
 
@@ -92,6 +96,7 @@ else:
 for epoch in range (1, EPOCH + 1):
     retrain(trainloader, net, USE_CUDA, epoch, criterion, optimizer)
     retest(testloader, net, USE_CUDA, criterion, epoch, RESUME)
+    
 
 
 # hook the feature extractor
@@ -102,6 +107,12 @@ def hook_feature(module, input, output):
 
 net._modules.get(final_conv).register_forward_hook(hook_feature)
 
+#sliding window
+def sliding_window(img_pil, stepSize, windowSize):
+    width, height= img_pil.size
+    for y in range(0, height, stepSize):
+        for x in range(0, width,stepSize):
+            yield(x,y,img_pil.crop((x,y,x+windowSize,y+windowSize)))
 
 # CAM
 if CAM:
@@ -110,21 +121,48 @@ if CAM:
     #get_cam(net, features_blobs, img, classes, root)
     fire_sum=0
     nonfire_sum=0
-    nonfire=-1;
+    res=-1
+    
+    start = time.process_time()
     for _, _, f in os.walk('data'):
         for file in f:
             if '.png' not in file:
                 continue
             root = os.path.join('data', file)
-            img = Image.open(root)
-            features_blobs = []
-            net._modules.get(final_conv).register_forward_hook(hook_feature)
-            nonfire = get_cam(net, features_blobs, img, classes, root, IMG_SIZE)
+            img_pil = Image.open(root)
+            
+            if SLIDING_WINDOW:
+                fire=1
+                for (x,y,window_pil) in sliding_window(img_pil, STEP_SIZE, WINDOW_SIZE):
+                    
+                    if window_pil.width<WINDOW_SIZE or window_pil.height<WINDOW_SIZE:
+                        continue
+                    features_blobs = []
+                    net._modules.get(final_conv).register_forward_hook(hook_feature)
+                    
+                    root_img=root.replace('.png','_('+str(x)+','+str(y)+')_'+classes[fire]+'.png')
+                    
+                    fire, result_img = get_cam(net, features_blobs, window_pil, classes, root_img, IMG_SIZE)
+                    
+                    if fire==0:
+                        res=0
+                    
+                    cv2.imwrite('res_' + root_img, result_img)
+            else:
+                features_blobs = []
+                net._modules.get(final_conv).register_forward_hook(hook_feature)
+
+                #nonfire = get_cam(net, features_blobs, img, classes, root, IMG_SIZE)
+                res, result_img = get_cam(net, features_blobs, img_pil, classes, root, IMG_SIZE)
+                
+                cv2.imwrite('res_' + root, result_img)
 
             #count fire, nonfire
-            if nonfire==0:
+            if res==0:
                 fire_sum+=1
-            elif nonfire==1:
+            elif res==1:
                 nonfire_sum+=1
-    
+                
+    time = time.process_time()-start
+    print('process time for inference : %d ms'%(time*1000/100))
     print('output CAM.jpg total fire : {0}, nonfire : {1}'.format(fire_sum, nonfire_sum))
