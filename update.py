@@ -4,10 +4,17 @@ from torch.nn import functional as F
 import numpy as np
 import cv2
 
+#sliding window
+def sliding_window(img_pil, stepSize, windowSize):
+    width, height= img_pil.size
+    for y in range(0, height, stepSize):
+        for x in range(0, width,stepSize):
+            yield(x,y,img_pil.crop((x,y,x+windowSize,y+windowSize)))
+
 # generate class activation mapping for the top1 prediction
 def return_cam(feature_conv, weight_softmax, class_idx):
     # generate the class activation maps upsample to 256x256
-    size_upsample = (256, 256)
+    size_upsample = (224, 224)
     bz, nc, h, w = feature_conv.shape
     output_cam = []
     for idx in class_idx:
@@ -18,7 +25,6 @@ def return_cam(feature_conv, weight_softmax, class_idx):
         cam_img = np.uint8(255 * cam_img)
         output_cam.append(cv2.resize(cam_img, size_upsample))
     return output_cam
-
 
 def get_cam(net, features_blobs, img_pil, classes, root_img, IMG_SIZE):
     net.eval()
@@ -32,6 +38,7 @@ def get_cam(net, features_blobs, img_pil, classes, root_img, IMG_SIZE):
     )
     preprocess = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
+        transforms.Pad(padding=112),
         transforms.ToTensor(),
         normalize
     ])
