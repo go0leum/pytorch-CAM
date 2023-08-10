@@ -1,8 +1,5 @@
 import torch
-import numpy as np
 from torch.autograd import Variable
-from sklearn.model_selection import KFold
-from torch.utils.data import Subset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
         
 def retrain(trainloader, model, use_cuda, epoch, criterion, optimizer,writer):

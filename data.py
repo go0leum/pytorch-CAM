@@ -1,10 +1,10 @@
-import torch, os
-from torch.utils.data import DataLoader, TensorDataset
+import torch, os, cv2
+from torch.utils.data import DataLoader
 from torch.utils.data import random_split
 from torchvision import datasets, transforms
 from PIL import Image
-import numpy as np
 from itertools import product
+from collections import deque
 
 
 def dataSetLoad(DATA_SET_DIR, TRAIN_TEST_SPLIT, IMG_SIZE, BATCH_SIZE):
@@ -35,7 +35,6 @@ def dataSetLoad(DATA_SET_DIR, TRAIN_TEST_SPLIT, IMG_SIZE, BATCH_SIZE):
     
     return data_set, train_loader, test_loader
 
-
 def checkpointLoad(CHECK_POINT_DIR, RESUME):
     print("===> Resuming from checkpoint.")
     assert os.path.isfile(CHECK_POINT_DIR+'/'+ str(RESUME) + '.pt'), 'Error: no checkpoint found!'
@@ -44,6 +43,7 @@ def checkpointLoad(CHECK_POINT_DIR, RESUME):
     return checkpoint
 
 def batch_window(img_pil, batch, stepSize, windowSize):
+    
     width, height= img_pil.size
     
     n_y = (height//stepSize)+(height%stepSize!=0)
@@ -52,7 +52,6 @@ def batch_window(img_pil, batch, stepSize, windowSize):
     total_iter = (n_y*n_x//batch)+(n_y*n_x%batch!=0)
     last_batch = n_y*n_x%batch
     
-    windows = []
     y_list = []
     windows = []
     i = 1
@@ -74,9 +73,7 @@ def batch_window(img_pil, batch, stepSize, windowSize):
             windows.append(y_tensor)
             y_list = []
             i+=1
-            
     return windows
-            
 
 def WindowDataLoad(cam_data_dir, batch, step_size, window_size):
     
@@ -89,7 +86,7 @@ def WindowDataLoad(cam_data_dir, batch, step_size, window_size):
             root = os.path.join(cam_data_dir, file)
             img = Image.open(root)
             
-            img_pil=pad(img)
+            img_pil = pad(img)
             
             windows = batch_window(img_pil, batch, step_size, window_size)
             
@@ -105,3 +102,27 @@ def camDataLoad(cam_data_dir):
             img = Image.open(root)
             
             yield(root, img)
+
+def VideoInput(cam_index, frame_width, frame_height, fps, batch, step_size, window_size):
+    pad = transforms.Pad(padding=step_size, padding_mode='reflect')
+    
+    video_capture = cv2.VideoCapture(cam_index, cv2.CAP_DSHOW)
+    video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+    video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+    video_capture.set(cv2.CAP_PROP_FPS, fps)
+
+    while True:
+        # Grab a single frame of video
+        received, img = video_capture.read()
+        if not received:
+            break
+
+        img = cv2.flip(img, 1)
+        img_cc = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(img_cc)
+        
+        img_pad = pad(img_pil)
+        
+        windows = batch_window(img_pad, batch, step_size, window_size)
+        
+        yield(img, windows)

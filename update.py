@@ -87,12 +87,12 @@ def return_cam(feature_conv, weight_softmax, class_idx):
         output_cam.append(cv2.resize(cam_img, size_upsample))
     return output_cam
 
-def get_cam_window(net, features_blobs, img, img_set, window_size):
+def get_cam_window(net, features_blobs, img, windows, classes, window_size):
     net.eval()
     
-    width, height= img.size
+    height, width, _= img.shape
     res_list = []
-    res = 1
+    res = 0
     
     params = list(net.parameters())
     weight_softmax = np.squeeze(params[-2].data.cpu().numpy())
@@ -102,16 +102,16 @@ def get_cam_window(net, features_blobs, img, img_set, window_size):
         std=[0.229, 0.224, 0.225]
     )
     
-    for i in range(len(img_set)):
-        img_tensor = normalize(img_set[i])
+    for i in range(len(windows)):
+        img_tensor = normalize(windows[i])
         img_variable = Variable(img_tensor).cuda()
         logit = net(img_variable)
         h_x = F.softmax(logit, dim=1).data.squeeze()
         probs, idx = h_x.sort(1, True)
-    
-        if idx[:,0].size()[0] != int(torch.count_nonzero(idx[:,0])): res=0
         
-        for batch in range(img_set[i].shape[0]):
+        res += (idx[:,0].size()[0] - int(torch.count_nonzero(idx[:,0])))
+        
+        for batch in range(img_tensor.size()[0]):
             features_conv = np.expand_dims(features_blobs[i][batch], axis=0)
             CAMs = return_cam(features_conv, weight_softmax, [0])
             res_list.append(CAMs[0])
@@ -119,11 +119,22 @@ def get_cam_window(net, features_blobs, img, img_set, window_size):
     cam_set = np.stack(res_list)
     CAM = merge_window(height, width, cam_set, window_size)
     
-    img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-    heatmap = cv2.applyColorMap(CAM, cv2.COLORMAP_JET)
-    result = heatmap * 0.3 + img_cv * 0.5
+    heatmap = cv2.applyColorMap(CAM, cv2.COLORMAP_TURBO)
+    cam_res = np.uint8(heatmap * 0.5 + img * 0.5)
     
-    return res, result
+    
+    blue = (255,0,0)
+    red = (0,0,255)
+    font =  cv2.FONT_HERSHEY_PLAIN
+    
+    if res < 2:
+        fire = 1
+        result = cv2.putText(cam_res, classes[fire], (40,40), font, 2, blue, 2, cv2.LINE_AA)
+    else:
+        fire = 0
+        result = cv2.putText(cam_res, classes[fire], (40,40), font, 2, red, 2, cv2.LINE_AA)
+    
+    return fire, result
 
 def get_cam(net, features_blobs, img_pil, classes, root_img, IMG_SIZE):
     net.eval()
@@ -159,7 +170,7 @@ def get_cam(net, features_blobs, img_pil, classes, root_img, IMG_SIZE):
     print('output %s for the top1 prediction: %s' %(root_img, classes[idx[0].item()]))
     
     CAM = cv2.resize(CAMs[0], (width, height))
-    heatmap = cv2.applyColorMap(CAM, cv2.COLORMAP_JET)
-    result = heatmap * 0.3 + img_cv * 0.5
+    heatmap = cv2.applyColorMap(CAM, cv2.COLORMAP_TURBO)
+    result = heatmap * 0.5 + img_cv * 0.5
         
     return idx[0].item(), result

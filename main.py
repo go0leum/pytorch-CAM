@@ -7,15 +7,14 @@ from inception import inception_v3
 from data import *
 from train import *
 from update import *
-from window import *
-import torch
 import time
+from datetime import datetime
 
 #data directory
 DATA_SET_DIR         = 'fire_data'          #train+test 데이터셋 디렉토리
 CHECK_POINT_DIR      = 'checkpoint'         #checkpoint저장할 디렉토리
 PREDCICTION_DATA_DIR = 'data'               #cam 할 데이터셋 디렉토리, cam 결과는 res_cam_fire_data
-# FAULT_DATA_DIR       = 'cam_fault_data'     #predition 실패한 cam 결과 저장할 디렉토리
+VAL_VIDEO_DIR        = 'data/test.mov'
 
 #hyperparameter
 TRAIN_TEST_SPLIT     = 0.2
@@ -84,34 +83,43 @@ def hook_feature(module, input, output):
     features_blobs.append(output.data.cpu().numpy())
 net._modules.get(final_conv).register_forward_hook(hook_feature)
 
+fps = 15
+cam_index = 0
+frame_width = 1280
+frame_height = 720
+
 #CAM(prediction)
 if CAM==1:
     fire_sum=0
     nonfire_sum=0
     if SLIDING_WINDOW:
-        for (root, img, windows) in WindowDataLoad(PREDCICTION_DATA_DIR, BATCH_SIZE, STEP_SIZE, WINDOW_SIZE):
-            start = time.process_time()
+        for (img, windows) in VideoInput(cam_index, frame_width, frame_height, fps, BATCH_SIZE, STEP_SIZE, WINDOW_SIZE):
             
             res=-1
             features_blobs = []
-            
             img_set = windows
             
-            res, result_img = get_cam_window(net, features_blobs, img, img_set, WINDOW_SIZE)
+            start = datetime.now()
+            res, result_img = get_cam_window(net, features_blobs, img, windows, classes, WINDOW_SIZE)
+            end = datetime.now()
+            elapsed_time = end-start
+            max_sleep = 1/fps
             
-            root_img=root.replace('.png','_'+classes[res]+'.png')
-            cv2.imwrite('res_' + root_img, result_img)
+            cv2.imshow("fire detection test", result_img)
             
-            pt = time.process_time()-start
-            print('\nprocess time for inference : %d ms'%(pt*1000/100))
+            if max_sleep > elapsed_time.total_seconds():
+                cv2.waitKey((max_sleep - elapsed_time.total_seconds())*10)
+            else:
+                cv2.waitKey(1)
             
             if res==0:
+                cv2.imwrite('res_data/fire_%06.d.png'%fire_sum, result_img)
                 fire_sum+=1
             else :
                 nonfire_sum+=1
     else:
         for (root, img) in camDataLoad(PREDCICTION_DATA_DIR):
-            start = time.process_time()
+            start = datetime.now()
             
             features_blobs = []
             net._modules.get(final_conv).register_forward_hook(hook_feature)
@@ -121,8 +129,9 @@ if CAM==1:
             root_img=root.replace('.png','_'+classes[res]+'.png')
             cv2.imwrite('res_' + root_img, result_img)
             
-            pt = time.process_time()-start
-            print('\nprocess time for inference : %d ms'%(pt*1000/100))
+            end = datetime.now()
+            elapsed_time = end-start
+            print('\nprocess time for inference : %d ms'%(elapsed_time*1000/100))
             
             if res==0:
                 fire_sum+=1
