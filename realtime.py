@@ -20,7 +20,7 @@ import sys
 
 events = {
     'stop': threading.Event(),
-    'preview': threading.Event(),
+    'record': threading.Event(),
     'detection': threading.Event()
 }
 
@@ -47,14 +47,19 @@ class MainWindow:
         self.tk = tk.Tk()
         self.tk.title('Fire Detection by LightVision Inc.')
         
-        img = np.zeros((args.frame_height, args.frame_width, 3), np.uint8)
+        img = np.zeros((self.args.frame_height, self.args.frame_width, 3), np.uint8)
         img = Image.fromarray(img)
         self.webcam_tk = ImageTk.PhotoImage(image=img)
         self.webcam = tk.Label(self.tk, image=self.webcam_tk)
         self.webcam.pack(side='left', fill='both')
         
+        # self.video_writer = None
+        
         frame = tk.Frame(self.tk)
         frame.pack(side='top', fill='x', pady=5)
+        
+        # self.btn_rec = tk.Button(frame, text = 'start record', overrelief="solid", command=self._video_record)
+        # self.btn_rec.pack(side='top', fill='x', pady=5)
         
         self.tk.after_idle(self._start_fire_detection)
         self.tk.protocol('WM_DELETE_WINDOW', self._stop_fire_detection)
@@ -65,6 +70,9 @@ class MainWindow:
 
         self.webcam.config(image=self.webcam_tk)
         self.webcam.image = self.webcam_tk
+    
+    # def record_webcam_image(self, img):
+    #     self.video_writer(img)
     
     def _start_fire_detection(self):
         events['detection'].set()
@@ -78,6 +86,18 @@ class MainWindow:
         self.video_input.join(timeout=1)
         self.cam.join(timeout=1)
         self.tk.destroy()
+    
+    # def _video_record(self):
+    #     if self.btn_rec['text'] == 'start record':
+    #         fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    #         rec_dir = 'record_video/record_%06.d.avi'%self.rec_count
+    #         self.video_writer = cv2.VideoWriter(rec_dir, fourcc, self.args.fps, (self.args.frame_width, self.args.frame_height))
+    #         events['record'].set()
+    #         self.btn_rec['text'] = 'end record'
+    #     else:
+    #         events['record'].clear()
+    #         self.rec_count+=1
+    #         self.btn_rec['text'] == 'start record'
 
 class VideoInput(threading.Thread):
     def __init__(self, args):
@@ -109,7 +129,7 @@ class Display(threading.Thread):
         self.img = None
         self.fd_img = cv2.applyColorMap(np.zeros((self.args.frame_height, self.args.frame_width,3), dtype=np.uint8),cv2.COLORMAP_TURBO)
         self.fd_res = 1
-        self.count = 0
+        self.fire_count = 0
         self.write = 1
     
     def run(self):
@@ -121,6 +141,7 @@ class Display(threading.Thread):
                 pass
             
             if len(q_cam_out)==0:
+                self.write = 1
                 self.fd_img = self.fd_img
                 self.fd_res = self.fd_res
             else:
@@ -136,7 +157,11 @@ class Display(threading.Thread):
                     pass
               
             if self.org_img is not None:
-                self.img = self._draw_cam(self.org_img, self.fd_img, self.fd_res)
+                self.img = self._draw_cam(self.org_img, self.fd_img, self.fd_res, self.write)
+                
+                # if events['record'].is_set():
+                #     main_window.record_webcam_image(self.img)
+                    
                 self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB)
                 main_window.update_webcam_image(self.img)
             
@@ -146,13 +171,13 @@ class Display(threading.Thread):
             if max_sleep > elapsed_time.total_seconds():
                 time.sleep(max_sleep - elapsed_time.total_seconds())
     
-    def _draw_cam(self, org_img, fd_img, fd_res):
+    def _draw_cam(self, org_img, fd_img, fd_res, write):
         res_img = np.uint8(org_img * 0.6 + fd_img * 0.4)
-        
-        if self.write==0 and fd_res==0:
+        if fd_res == 0 :
             res_img = cv2.putText(res_img, 'fire', (40,40), cv2.FONT_HERSHEY_PLAIN, 2, (0,0,255), 2, cv2.LINE_AA)
-            cv2.imwrite('fire_alarm/%06.d.png'%self.count, res_img)
-            self.count+=1
+            if write == 0 :
+                cv2.imwrite('fire_alarm/%06.d.png'%self.fire_count, res_img)
+                self.fire_count+=1
         
         return res_img
 
@@ -190,6 +215,7 @@ class FireCAM(threading.Thread):
                 end = datetime.now()
                 
                 elapsed_time = (end-start)
+                print(elapsed_time)
                 max_sleep = 1 / self.args.camfps
                 
                 if max_sleep > elapsed_time.total_seconds():
@@ -372,6 +398,7 @@ def main(args):
     global main_window
     main_window = MainWindow(args)
     main_window.tk.mainloop()
+    # main_window.video_writer.release()
 
 def parse_arguments(argv):
 
