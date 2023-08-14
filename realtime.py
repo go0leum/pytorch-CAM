@@ -190,7 +190,6 @@ class FireCAM(threading.Thread):
                 end = datetime.now()
                 
                 elapsed_time = (end-start)
-                print(elapsed_time)
                 max_sleep = 1 / self.args.camfps
                 
                 if max_sleep > elapsed_time.total_seconds():
