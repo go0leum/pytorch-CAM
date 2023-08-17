@@ -53,13 +53,14 @@ class MainWindow:
         self.webcam = tk.Label(self.tk, image=self.webcam_tk)
         self.webcam.pack(side='left', fill='both')
         
-        # self.video_writer = None
+        self.rec_count = 0
+        self.video_writer = None
         
         frame = tk.Frame(self.tk)
         frame.pack(side='top', fill='x', pady=5)
         
-        # self.btn_rec = tk.Button(frame, text = 'start record', overrelief="solid", command=self._video_record)
-        # self.btn_rec.pack(side='top', fill='x', pady=5)
+        self.btn_rec = tk.Button(frame, text = 'start record', overrelief="solid", command=self._video_record)
+        self.btn_rec.pack(side='top', fill='x', pady=5)
         
         self.tk.after_idle(self._start_fire_detection)
         self.tk.protocol('WM_DELETE_WINDOW', self._stop_fire_detection)
@@ -71,8 +72,9 @@ class MainWindow:
         self.webcam.config(image=self.webcam_tk)
         self.webcam.image = self.webcam_tk
     
-    # def record_webcam_image(self, img):
-    #     self.video_writer(img)
+    def record_webcam_image(self, img):
+        if events['record'].is_set():
+            self.video_writer.write(img)
     
     def _start_fire_detection(self):
         events['detection'].set()
@@ -87,17 +89,19 @@ class MainWindow:
         self.cam.join(timeout=1)
         self.tk.destroy()
     
-    # def _video_record(self):
-    #     if self.btn_rec['text'] == 'start record':
-    #         fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    #         rec_dir = 'record_video/record_%06.d.avi'%self.rec_count
-    #         self.video_writer = cv2.VideoWriter(rec_dir, fourcc, self.args.fps, (self.args.frame_width, self.args.frame_height))
-    #         events['record'].set()
-    #         self.btn_rec['text'] = 'end record'
-    #     else:
-    #         events['record'].clear()
-    #         self.rec_count+=1
-    #         self.btn_rec['text'] == 'start record'
+    def _video_record(self):
+        if self.btn_rec['text'] == 'start record':
+            fourcc = cv2.VideoWriter_fourcc(*'XVID')
+            vid_name = datetime.now().strftime('%d-%m-%Y %H-%M-%S')
+            rec_dir = 'record_video/record_'+vid_name+'.avi'
+            self.video_writer = cv2.VideoWriter(rec_dir, fourcc, self.args.fps, (self.args.frame_width, self.args.frame_height))
+            self.btn_rec['text'] = 'end record'
+            events['record'].set()
+        else :
+            self.video_writer.release()
+            self.rec_count+=1
+            self.btn_rec['text'] = 'start record'
+            events['record'].clear()
 
 class VideoInput(threading.Thread):
     def __init__(self, args):
@@ -129,7 +133,6 @@ class Display(threading.Thread):
         self.img = None
         self.fd_img = cv2.applyColorMap(np.zeros((self.args.frame_height, self.args.frame_width,3), dtype=np.uint8),cv2.COLORMAP_TURBO)
         self.fd_res = 1
-        self.fire_count = 0
         self.write = 1
     
     def run(self):
@@ -159,8 +162,8 @@ class Display(threading.Thread):
             if self.org_img is not None:
                 self.img = self._draw_cam(self.org_img, self.fd_img, self.fd_res, self.write)
                 
-                # if events['record'].is_set():
-                #     main_window.record_webcam_image(self.img)
+                if events['record'].is_set():
+                    main_window.record_webcam_image(self.img)
                     
                 self.img = cv2.cvtColor(self.img, cv2.COLOR_BGR2RGB)
                 main_window.update_webcam_image(self.img)
@@ -174,10 +177,11 @@ class Display(threading.Thread):
     def _draw_cam(self, org_img, fd_img, fd_res, write):
         res_img = np.uint8(org_img * 0.6 + fd_img * 0.4)
         if fd_res == 0 :
-            res_img = cv2.putText(res_img, 'fire', (40,40), cv2.FONT_HERSHEY_PLAIN, 2, (0,0,255), 2, cv2.LINE_AA)
+            res_img = cv2.putText(res_img, 'fire', (40,60), cv2.FONT_HERSHEY_PLAIN, 3, (0,0,255), 2, cv2.LINE_AA)
             if write == 0 :
-                cv2.imwrite('fire_alarm/%06.d.png'%self.fire_count, res_img)
-                self.fire_count+=1
+                now = datetime.now()
+                date = now.strftime('%Y-%m-%d %H-%M-%S')
+                cv2.imwrite('false_alarm/'+date+'.png', org_img)
         
         return res_img
 
@@ -205,7 +209,12 @@ class FireCAM(threading.Thread):
                     img = q_cam_in.pop()
                     img_set = self._batch_window(img)
                     
-                    fire_alarm, cam_set = self._get_cam_window(net, self.features_blobs, img_set)
+                    fire_count, fire_list, cam_set = self._get_cam_window(net, self.features_blobs, img, img_set)
+                    
+                    if fire_count == 0: fire_alarm = 1
+                    else:
+                        fire_alarm = self._second_window(net, img, fire_list)
+                    
                     CAM = self._merge_window(cam_set, self.args.stepSize, self.args.windowSize)
                     heatmap = cv2.applyColorMap(CAM, cv2.COLORMAP_TURBO)
                     
@@ -224,7 +233,7 @@ class FireCAM(threading.Thread):
                     time.sleep(1e-3)
                     
             except IndexError:
-                time.sleep(1 / (1.3 * self.args.camfps))
+                time.sleep(1 / (2.5 * self.args.camfps))
             except Exception as e:
                 print(e)
                 
@@ -299,11 +308,70 @@ class FireCAM(threading.Thread):
             output_cam.append(cv2.resize(cam_img, size_upsample))
         return output_cam
     
-    def _get_cam_window(self, net, features_blobs, windows):
+    def _second_window(self, net, img, fire_list):
+        pad = transforms.Pad(padding=self.args.stepSize, padding_mode='reflect')
+        
+        transform = transforms.Compose([
+            transforms.Resize((self.args.windowSize,self.args.windowSize)),
+            transforms.ToTensor()
+            ])
+        
+        normalize = transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        )
+        
+        img_cc = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(img_cc)
+        img_pad = pad(img_pil)
+        
+        w, h = img_pad.size
+        step_Size = self.args.stepSize
+        window_Size = self.args.windowSize
+        batch = self.args.batchSize
+        n_y = (h//step_Size)+(h%step_Size!=0)
+        
+        res = 0
+        wins = []
+        
+        for i in range(0, len(fire_list)):
+            fier_tensor = fire_list[i]
+            for j in range(0, fier_tensor.shape[0]):
+                n = i*batch + int(fier_tensor[j])
+                i_y = n%n_y
+                i_x = (n//n_y)+(n%n_y!=0)
+                y = (i_y-0.5)*step_Size if (i_y-0.5)>=0 else 0
+                x = (i_x-0.5)*step_Size if (i_x-0.5)>=0 else 0
+                pil_crop = img_pad.crop((x, y, x+(1.5*window_Size), y+(1.5*window_Size)))
+                tensor_crop = transform(pil_crop)
+                wins.append(tensor_crop)
+        
+            wins_tensor=torch.stack(wins)
+            
+            win_tensor = normalize(wins_tensor)
+            win_variable = Variable(win_tensor).cuda()
+            
+            logit = net(win_variable)
+            h_x = F.softmax(logit, dim=1).data.squeeze()
+            _, win_idx = h_x.sort(1, True)
+            
+            print(win_idx[:,0].size()[0] - int(torch.count_nonzero(win_idx[:,0])))
+            
+            if (win_idx[:,0].size()[0] - int(torch.count_nonzero(win_idx[:,0]))) != 0:
+                res += 1
+        
+        if res !=0 : fire_alarm = 0
+        else : fire_alarm = 1
+        
+        return fire_alarm
+        
+    
+    def _get_cam_window(self, net, features_blobs, img, windows):
         net.eval()
         
         res_list = []
-        res = 0
+        fire_list = []
+        fire_count = 0
         
         params = list(net.parameters())
         weight_softmax = np.squeeze(params[-2].data.cpu().numpy())
@@ -313,28 +381,29 @@ class FireCAM(threading.Thread):
             std=[0.229, 0.224, 0.225]
         )
         
-        for i in range(len(windows)):
+        for i in range(0, len(windows)):
             img_tensor = normalize(windows[i])
             img_variable = Variable(img_tensor).cuda()
             logit = net(img_variable)
             h_x = F.softmax(logit, dim=1).data.squeeze()
             _, idx = h_x.sort(1, True)
             
-            res += (idx[:,0].size()[0] - int(torch.count_nonzero(idx[:,0])))
+            fire = (idx[:,0].size()[0] - int(torch.count_nonzero(idx[:,0])))
             
             for batch in range(img_tensor.size()[0]):
                 features_conv = np.expand_dims(features_blobs[i][batch], axis=0)
                 CAMs = self._return_cam(features_conv, weight_softmax, [0])
                 res_list.append(CAMs[0])
-                
+            
+            if fire != 0:
+                indexes = (idx[:,0]==0).nonzero(as_tuple = False)
+                print(indexes)
+                fire_count += fire
+                fire_list.append(indexes)
+        
         cam_set = np.stack(res_list)
         
-        if res < 2:
-            fire_alarm = 1
-        else:
-            fire_alarm = 0
-        
-        return fire_alarm, cam_set
+        return fire_count, fire_list, cam_set
 
     def _window_2d(self, wnd_sz, power=2):
         '''
@@ -398,7 +467,6 @@ def main(args):
     global main_window
     main_window = MainWindow(args)
     main_window.tk.mainloop()
-    # main_window.video_writer.release()
 
 def parse_arguments(argv):
 
@@ -408,11 +476,11 @@ def parse_arguments(argv):
     parser.add_argument('--frame_width', type=int, default=1280)
     parser.add_argument('--frame_height', type=int, default=720)
     parser.add_argument('--fps', type=int, default=15)
-    parser.add_argument('--camfps', type=int, default=3)
+    parser.add_argument('--camfps', type=int, default=2)
     parser.add_argument('--stepSize', type=int, default=112)
     parser.add_argument('--windowSize', type=int, default=224)
     parser.add_argument('--batchSize', type=int, default=64)
-    parser.add_argument('--model_Epoch', type=int, default=57)
+    parser.add_argument('--model_Epoch', type=int, default=62)
     parser.add_argument('--model_lr', type=float, default=0.001) #learning rate
     parser.add_argument('--db_path', type=str, default='dataset')
     
