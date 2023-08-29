@@ -465,11 +465,11 @@ class FireCAM(threading.Thread):
 
 def main(args):
     os.environ['FIRE_DETECTION_HOME'] = os.getcwd()
-    if not os.path.exits(args.alarm_path):
+    if not os.path.exists(args.alarm_path):
         os.mkdir(args.alarm_path)
-    if not os.path.exits(args.pt_path):
+    if not os.path.exists(args.pt_path):
         os.mkdir(args.pt_path)
-    if not os.path.exits(args.record_path):
+    if not os.path.exists(args.record_path):
         os.mkdir(args.record_path)
     global main_window
     main_window = MainWindow(args)
