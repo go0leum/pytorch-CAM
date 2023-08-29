@@ -247,8 +247,8 @@ class FireCAM(threading.Thread):
         net = inception.inception_v3(num_classes=len(self.classes))
         net.cuda()
         
-        assert os.path.isfile(self.args.pt_paht+'/'+ str(resume) + '.pt'), 'Error: no checkpoint found!'
-        checkpoint = torch.load(self.args.pt_paht+'/' + str(resume) + '.pt')
+        assert os.path.isfile(self.args.path+'/'+ str(resume) + '.pt'), 'Error: no checkpoint found!'
+        checkpoint = torch.load(self.args.path+'/' + str(resume) + '.pt')
         net.load_state_dict(checkpoint)
         
         return net
