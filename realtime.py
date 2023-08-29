@@ -109,14 +109,14 @@ class VideoInput(threading.Thread):
         self.args = args
     
     def run(self):
-        video_capture = cv2.VideoCapture('data/Test.mp4')#self.args.cam_index, cv2.CAP_DSHOW)
+        video_capture = cv2.VideoCapture(self.args.cam_index, cv2.CAP_DSHOW)#'data/Test.mp4'
         video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.args.frame_width)
         video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.args.frame_height)
         video_capture.set(cv2.CAP_PROP_FPS, self.args.fps)
         
         while video_capture.isOpened():
             received, img = video_capture.read()
-            cv2.waitKey(17)
+            # cv2.waitKey(17)
             if events['stop'].is_set() or not received:
                 video_capture.release()
                 break
@@ -465,7 +465,6 @@ class FireCAM(threading.Thread):
 
 def main(args):
     os.environ['FIRE_DETECTION_HOME'] = os.getcwd()
-
     global main_window
     main_window = MainWindow(args)
     main_window.tk.mainloop()
@@ -477,12 +476,12 @@ def parse_arguments(argv):
     parser.add_argument('--cam_index', type=int, default=0)
     parser.add_argument('--frame_width', type=int, default=1280)
     parser.add_argument('--frame_height', type=int, default=720)
-    parser.add_argument('--fps', type=int, default=30)
+    parser.add_argument('--fps', type=int, default=20)
     parser.add_argument('--camfps', type=int, default=3)
     parser.add_argument('--stepSize', type=int, default=112)
     parser.add_argument('--windowSize', type=int, default=224)
     parser.add_argument('--batchSize', type=int, default=126)
-    parser.add_argument('--model_Epoch', type=int, default=20)
+    parser.add_argument('--model_Epoch', type=int, default=200)
     parser.add_argument('--model_lr', type=float, default=0.001) #learning rate
     
     return parser.parse_args(argv)
