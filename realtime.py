@@ -93,7 +93,7 @@ class MainWindow:
         if self.btn_rec['text'] == 'start record':
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
             vid_name = datetime.now().strftime('%d-%m-%Y %H-%M-%S')
-            rec_dir = 'record_video/record_'+vid_name+'.avi'
+            rec_dir = self.args.record_path+'/record_'+vid_name+'.avi'
             self.video_writer = cv2.VideoWriter(rec_dir, fourcc, self.args.fps, (self.args.frame_width, self.args.frame_height))
             self.btn_rec['text'] = 'end record'
             events['record'].set()
@@ -183,7 +183,7 @@ class Display(threading.Thread):
             res_img = cv2.putText(res_img, 'fire', (40,60), cv2.FONT_HERSHEY_PLAIN, 3, (0,0,255), 2, cv2.LINE_AA)
             if write == 0 :
                 date = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
-                cv2.imwrite('test_alarm/'+date+'.png', org_img)
+                cv2.imwrite(self.args.alarm_path+'/'+date+'.png', org_img)
         
         return res_img
 
@@ -247,8 +247,8 @@ class FireCAM(threading.Thread):
         net = inception.inception_v3(num_classes=len(self.classes))
         net.cuda()
         
-        assert os.path.isfile('checkpoint/'+ str(resume) + '.pt'), 'Error: no checkpoint found!'
-        checkpoint = torch.load('checkpoint/' + str(resume) + '.pt')
+        assert os.path.isfile(self.args.pt_paht+'/'+ str(resume) + '.pt'), 'Error: no checkpoint found!'
+        checkpoint = torch.load(self.args.pt_paht+'/' + str(resume) + '.pt')
         net.load_state_dict(checkpoint)
         
         return net
@@ -465,6 +465,12 @@ class FireCAM(threading.Thread):
 
 def main(args):
     os.environ['FIRE_DETECTION_HOME'] = os.getcwd()
+    if not os.path.exits(args.alarm_path):
+        os.mkdir(args.alarm_path)
+    if not os.path.exits(args.pt_path):
+        os.mkdir(args.pt_path)
+    if not os.path.exits(args.record_path):
+        os.mkdir(args.record_path)
     global main_window
     main_window = MainWindow(args)
     main_window.tk.mainloop()
@@ -473,6 +479,9 @@ def parse_arguments(argv):
 
     parser = argparse.ArgumentParser()
     
+    parser.add_argument('--alarm_path', type=str, default='test_alarm')
+    parser.add_argument('--pt_path', type=str, default='checkpoint')
+    parser.add_argument('--record_path', type=str, default='record_video')
     parser.add_argument('--cam_index', type=int, default=0)
     parser.add_argument('--frame_width', type=int, default=1280)
     parser.add_argument('--frame_height', type=int, default=720)
