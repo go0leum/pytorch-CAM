@@ -109,14 +109,16 @@ class VideoInput(threading.Thread):
         self.args = args
     
     def run(self):
-        video_capture = cv2.VideoCapture(self.args.cam_index, cv2.CAP_DSHOW)
+        video_capture = cv2.VideoCapture('data/Test.mp4')#self.args.cam_index, cv2.CAP_DSHOW)
         video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.args.frame_width)
         video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.args.frame_height)
         video_capture.set(cv2.CAP_PROP_FPS, self.args.fps)
         
-        while True:
+        while video_capture.isOpened():
             received, img = video_capture.read()
+            cv2.waitKey(17)
             if events['stop'].is_set() or not received:
+                video_capture.release()
                 break
 
             img = cv2.flip(img, 1)
@@ -177,11 +179,11 @@ class Display(threading.Thread):
     def _draw_cam(self, org_img, fd_img, fd_res, write):
         res_img = np.uint8(org_img * 0.6 + fd_img * 0.4)
         if fd_res == 0 :
+            res_img = cv2.putText(res_img, 'fire', (40,60), cv2.FONT_HERSHEY_PLAIN, 3, (225,225,255), 12, cv2.LINE_AA)
             res_img = cv2.putText(res_img, 'fire', (40,60), cv2.FONT_HERSHEY_PLAIN, 3, (0,0,255), 2, cv2.LINE_AA)
             if write == 0 :
-                now = datetime.now()
-                date = now.strftime('%Y-%m-%d %H-%M-%S')
-                cv2.imwrite('false_alarm/'+date+'.png', org_img)
+                date = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+                cv2.imwrite('test_alarm/'+date+'.png', org_img)
         
         return res_img
 
@@ -209,8 +211,10 @@ class FireCAM(threading.Thread):
                     img = q_cam_in.pop()
                     img_set = self._batch_window(img)
                     
-                    fire_count, fire_list, cam_set = self._get_cam_window(net, self.features_blobs, img, img_set)
+                    fire_count, fire_list, cam_set = self._get_cam_window(net, self.features_blobs, img_set)
                     
+                    # if fire_count<2 : fire_alarm =1
+                    # else : fire_alarm = 0
                     if fire_count == 0: fire_alarm = 1
                     else:
                         fire_alarm = self._second_window(net, img, fire_list)
@@ -335,9 +339,9 @@ class FireCAM(threading.Thread):
         wins = []
         
         for i in range(0, len(fire_list)):
-            fier_tensor = fire_list[i]
-            for j in range(0, fier_tensor.shape[0]):
-                n = i*batch + int(fier_tensor[j])
+            fire_tensor = fire_list[i]
+            for j in range(0, fire_tensor.shape[0]):
+                n = i*batch + int(fire_tensor[j])
                 i_y = n%n_y
                 i_x = (n//n_y)+(n%n_y!=0)
                 y = (i_y-0.5)*step_Size if (i_y-0.5)>=0 else 0
@@ -366,7 +370,7 @@ class FireCAM(threading.Thread):
         return fire_alarm
         
     
-    def _get_cam_window(self, net, features_blobs, img, windows):
+    def _get_cam_window(self, net, features_blobs, windows):
         net.eval()
         
         res_list = []
@@ -461,8 +465,6 @@ class FireCAM(threading.Thread):
 
 def main(args):
     os.environ['FIRE_DETECTION_HOME'] = os.getcwd()
-    if not os.path.exists(args.db_path):
-        os.mkdir(args.db_path)
 
     global main_window
     main_window = MainWindow(args)
@@ -475,14 +477,13 @@ def parse_arguments(argv):
     parser.add_argument('--cam_index', type=int, default=0)
     parser.add_argument('--frame_width', type=int, default=1280)
     parser.add_argument('--frame_height', type=int, default=720)
-    parser.add_argument('--fps', type=int, default=15)
-    parser.add_argument('--camfps', type=int, default=2)
+    parser.add_argument('--fps', type=int, default=30)
+    parser.add_argument('--camfps', type=int, default=3)
     parser.add_argument('--stepSize', type=int, default=112)
     parser.add_argument('--windowSize', type=int, default=224)
-    parser.add_argument('--batchSize', type=int, default=64)
-    parser.add_argument('--model_Epoch', type=int, default=62)
+    parser.add_argument('--batchSize', type=int, default=126)
+    parser.add_argument('--model_Epoch', type=int, default=20)
     parser.add_argument('--model_lr', type=float, default=0.001) #learning rate
-    parser.add_argument('--db_path', type=str, default='dataset')
     
     return parser.parse_args(argv)
 
