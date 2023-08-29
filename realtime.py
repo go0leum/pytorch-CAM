@@ -109,7 +109,7 @@ class VideoInput(threading.Thread):
         self.args = args
     
     def run(self):
-        video_capture = cv2.VideoCapture(self.args.cam_index, cv2.CAP_DSHOW)#'data/Test.mp4'
+        video_capture = cv2.VideoCapture(self.args.cam_index, cv2.CAP_DSHOW)
         video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.args.frame_width)
         video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.args.frame_height)
         video_capture.set(cv2.CAP_PROP_FPS, self.args.fps)
@@ -476,7 +476,7 @@ def parse_arguments(argv):
     parser.add_argument('--cam_index', type=int, default=0)
     parser.add_argument('--frame_width', type=int, default=1280)
     parser.add_argument('--frame_height', type=int, default=720)
-    parser.add_argument('--fps', type=int, default=20)
+    parser.add_argument('--fps', type=int, default=15)
     parser.add_argument('--camfps', type=int, default=3)
     parser.add_argument('--stepSize', type=int, default=112)
     parser.add_argument('--windowSize', type=int, default=224)
