@@ -182,7 +182,7 @@ class Display(threading.Thread):
             res_img = cv2.putText(res_img, 'fire', (40,60), cv2.FONT_HERSHEY_PLAIN, 3, (225,225,255), 12, cv2.LINE_AA)
             res_img = cv2.putText(res_img, 'fire', (40,60), cv2.FONT_HERSHEY_PLAIN, 3, (0,0,255), 2, cv2.LINE_AA)
             if write == 0 :
-                date = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+                date = datetime.utcnow().strftime('%Y-%m-%d %H-%M-%S.%f')[:-3]
                 cv2.imwrite(self.args.alarm_path+'/'+date+'.png', org_img)
         
         return res_img
